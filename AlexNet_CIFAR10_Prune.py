@@ -10,7 +10,7 @@ sample_to_predict = tf.image.resize(test_images[1], (277, 277))
 print(sample_to_predict.shape)
 sample_to_predict = tf.reshape(sample_to_predict, (-1, 277, 277, 3))
 print(sample_to_predict.shape)
-resized_train_images = tf.image.resize(train_images, (277, 277))
+#resized_train_images = tf.image.resize(train_images, (277, 277))
 resized_test_images = tf.image.resize(test_images, (277, 277))
 #print(resized_test_images.shape)
 
@@ -56,8 +56,8 @@ import numpy as np
 
 # Compute end step to finish pruning after 2 epochs.
 batch_size = 32
-epochs = 20
-
+epochs = 2
+"""
 end_step = np.ceil(resized_train_images.shape[0] / batch_size).astype(np.int32) * epochs
 
 # Define model for pruning.
@@ -67,15 +67,28 @@ pruning_params = {
                                                                begin_step=0,
                                                                end_step=end_step)
 }
+"""
 
-model_for_pruning = tfmot.sparsity.keras.prune_low_magnitude(model, **pruning_params)
+# Helper function uses `prune_low_magnitude` to make only the
+# Dense layers train with pruning.
+def apply_pruning_to_conv(layer):
+  if isinstance(layer, tf.keras.layers.Conv2D):
+    return tfmot.sparsity.keras.prune_low_magnitude(layer)
+  return layer
+
+# Use `tf.keras.models.clone_model` to apply `apply_pruning_to_dense`
+# to the layers of the model.
+model_for_pruning = tf.keras.models.clone_model(
+    model,
+    clone_function=apply_pruning_to_conv,
+)
 model_for_pruning.summary()
 
 callbacks = [
     tfmot.sparsity.keras.UpdatePruningStep()
 ]
 
-#model_for_pruning.load_weights('saved_pruned_weights/')
+model_for_pruning.load_weights('saved_pruned_weights/')
 
 model_for_pruning.compile(
     loss='sparse_categorical_crossentropy',
@@ -83,8 +96,8 @@ model_for_pruning.compile(
     metrics=['accuracy'],
 )
 
-model_for_pruning.fit(resized_train_images, train_labels, batch_size=batch_size, epochs=epochs, callbacks=callbacks)
-model_for_pruning.save_weights('saved_pruned_weights/')
+#model_for_pruning.fit(resized_train_images, train_labels, batch_size=batch_size, epochs=epochs, callbacks=callbacks)
+#model_for_pruning.save_weights('saved_pruned_weights/')
 
 model_for_pruning.evaluate(resized_test_images, test_labels)
 
@@ -92,6 +105,7 @@ for layer in model_for_pruning.layers:
     zero_weights = tf.size(layer.weights[0]).numpy() - tf.math.count_nonzero(layer.weights[0]).numpy()
     weight_sparsity = zero_weights / tf.size(layer.weights[0]).numpy() * 100
     print("Weight sparsity of layer", layer.name, "is:", weight_sparsity)
+#    print(layer.weights.shape)
 
 from keras import backend as K
 
